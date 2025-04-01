@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Încarcă conținut{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3>Încarcă conținut nou</h3>
+            </div>
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Titlu</label>
+                        <input type="text" class="form-control" id="title" name="title" required 
+                               placeholder="Dă un titlu conținutului">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="file" class="form-label">Fișier (opțional)</label>
+                        <input type="file" class="form-control" id="file" name="file">
+                        <div class="form-text text-muted">
+                            Acceptam: txt, pdf, doc, mp4, mov, mp3, wav
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="url" class="form-label">Sau link</label>
+                        <input type="url" class="form-control" id="url" name="url" 
+                               placeholder="https://example.com/continut">
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="content_type" class="form-label">Tipul conținutului</label>
+                        <select class="form-select" id="content_type" name="content_type">
+                            <option value="text">Text (articole, documente)</option>
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Încarcă</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Logică pentru a dezactiva câmpurile alternative
+    document.getElementById('file').addEventListener('change', function() {
+        var urlField = document.getElementById('url');
+        if (this.value) {
+            urlField.value = '';
+            urlField.disabled = true;
+        } else {
+            urlField.disabled = false;
+        }
+    });
+    
+    document.getElementById('url').addEventListener('input', function() {
+        var fileField = document.getElementById('file');
+        if (this.value) {
+            fileField.value = '';
+            fileField.disabled = true;
+        } else {
+            fileField.disabled = false;
+        }
+    });
+</script>
+{% endblock %}

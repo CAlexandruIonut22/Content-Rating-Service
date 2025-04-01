@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block title %}Analiză automată{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3>Analiză automată: {{ content.title }}</h3>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <p>Analiza automată nu este disponibilă momentan în această versiune simplificată.</p>
+                </div>
+                
+                <div class="d-grid mt-3">
+                    <a href="/content/{{ content.id }}" class="btn btn-primary">Înapoi la conținut</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

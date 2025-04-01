@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Evaluează conținutul{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3>Evaluează: {{ content.title }}</h3>
+            </div>
+            <div class="card-body">
+                <!-- ce evaluăm -->
+                <div class="mb-4 border-bottom pb-3">
+                    <h5>Conținut de evaluat:</h5>
+                    {% if content.is_file %}
+                        <p>
+                            <strong>Fișier:</strong> 
+                            {% if content.file_path %}
+                                {{ content.file_path.split('/')[-1] }}
+                            {% else %}
+                                (lipsă informații)
+                            {% endif %}
+                        </p>
+                    {% else %}
+                        <p>
+                            <strong>Link:</strong> 
+                            <a href="{{ content.url }}" target="_blank">{{ content.url }}</a>
+                        </p>
+                    {% endif %}
+                    <p class="text-muted">Tip: {{ content.content_type }}</p>
+                </div>
+
+                <!-- explicație evaluare -->
+                <div class="mb-4 bg-light p-3 rounded">
+                    <h5>Criterii de evaluare:</h5>
+                    <ul>
+                        <li><strong>Coerență:</strong> Are sens conținutul? Ideile sunt conectate logic?</li>
+                        <li><strong>Adevăr:</strong> Informațiile sunt corecte din punct de vedere factual?</li>
+                        <li><strong>Prezentare:</strong> Este plăcut de urmărit/citit/ascultat?</li>
+                    </ul>
+                    <p class="small">Toate evaluările sunt pe o scară de la 1 la 10 (1=foarte slab, 10=excelent)</p>
+                </div>
+
+                <!-- formular evaluare -->
+                <form method="POST">
+                    <!-- slider coerență -->
+                    <div class="mb-4">
+                        <label for="coherence" class="form-label fw-bold">Coerență:</label>
+                        <input type="range" class="form-range" id="coherence" name="coherence" 
+                               min="1" max="10" value="{{ existing_rating.coherence if existing_rating else 7 }}">
+                        <div class="d-flex justify-content-between small text-muted">
+                            <span>Confuz</span>
+                            <span id="coherence-value">{{ existing_rating.coherence if existing_rating else 7 }}</span>
+                            <span>Perfect clar</span>
+                        </div>
+                    </div>
+
+                    <!-- slider adevăr -->
+                    <div class="mb-4">
+                        <label for="truth" class="form-label fw-bold">Adevăr:</label>
+                        <input type="range" class="form-range" id="truth" name="truth" 
+                               min="1" max="10" value="{{ existing_rating.truth if existing_rating else 7 }}">
+                        <div class="d-flex justify-content-between small text-muted">
+                            <span>Neadevărat</span>
+                            <span id="truth-value">{{ existing_rating.truth if existing_rating else 7 }}</span>
+                            <span>Complet adevărat</span>
+                        </div>
+                    </div>
+
+                    <!-- slider prezentare -->
+                    <div class="mb-4">
+                        <label for="attractiveness" class="form-label fw-bold">Prezentare:</label>
+                        <input type="range" class="form-range" id="attractiveness" name="attractiveness" 
+                               min="1" max="10" value="{{ existing_rating.attractiveness if existing_rating else 7 }}">
+                        <div class="d-flex justify-content-between small text-muted">
+                            <span>Neatrăgător</span>
+                            <span id="attractiveness-value">{{ existing_rating.attractiveness if existing_rating else 7 }}</span>
+                            <span>Foarte atractiv</span>
+                        </div>
+                    </div>
+
+                    <!-- caseta comentarii -->
+                    <div class="mb-3">
+                        <label for="comment" class="form-label fw-bold">Comentarii (opțional):</label>
+                        <textarea class="form-control" id="comment" name="comment" rows="3" 
+                                  placeholder="Împărtășește observațiile tale despre acest conținut...">{{ existing_rating.comment if existing_rating else '' }}</textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">Trimite evaluarea</button>
+                        <a href="/content/{{ content.id }}" class="btn btn-outline-secondary">Anulează</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // actualizează valorile afișate când sliderii se mișcă
+    document.getElementById('coherence').addEventListener('input', function() {
+        document.getElementById('coherence-value').textContent = this.value;
+    });
+    
+    document.getElementById('truth').addEventListener('input', function() {
+        document.getElementById('truth-value').textContent = this.value;
+    });
+    
+    document.getElementById('attractiveness').addEventListener('input', function() {
+        document.getElementById('attractiveness-value').textContent = this.value;
+    });
+</script>
+{% endblock %}
