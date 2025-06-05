@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}Test model LLM{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3>Test Funcționalitate LLM</h3>
+            </div>
+            <div class="card-body">
+                {% if success %}
+                    <div class="alert alert-success">
+                        <h4>Modelul LLM funcționează! 🎉</h4>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h5>Rezultatul testului:</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p><strong>Scor factualitate:</strong> {{ result.factuality_score }}/10</p>
+                                <p><strong>Încredere:</strong> {{ result.confidence }}/10</p>
+                                <p><strong>Raționament:</strong> {{ result.reasoning }}</p>
+                                
+                                {% if result.questionable_claims %}
+                                    <p><strong>Afirmații problematice:</strong></p>
+                                    <ul>
+                                        {% for claim in result.questionable_claims %}
+                                            <li>{{ claim }}</li>
+                                        {% endfor %}
+                                    </ul>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="alert alert-danger">
+                        <h4>Modelul LLM nu funcționează corect 😢</h4>
+                        <p>{{ error }}</p>
+                    </div>
+                    
+                    <div class="mt-4">
+                        <h5>Posibile cauze:</h5>
+                        <ul>
+                            <li>Dependențele necesare (torch, transformers, etc.) nu sunt instalate</li>
+                            <li>Nu ai destulă memorie RAM pentru model</li>
+                            <li>Directorul cache pentru model nu există sau nu are permisiuni</li>
+                            <li>Modelul n-a putut fi descărcat de pe Hugging Face</li>
+                        </ul>
+                        
+                        <h5 class="mt-3">Ce poți face:</h5>
+                        <p>Instalează dependențele:</p>
+                        <pre class="bg-dark text-light p-3">pip install torch transformers accelerate bitsandbytes sentencepiece huggingface_hub</pre>
+                        <p>Sau pentru versiunea doar CPU (mai mică):</p>
+                        <pre class="bg-dark text-light p-3">pip install torch --index-url https://download.pytorch.org/whl/cpu
+pip install transformers accelerate sentencepiece huggingface_hub</pre>
+                    </div>
+                {% endif %}
+                
+                <div class="d-grid gap-2 mt-4">
+                    <a href="/" class="btn btn-primary">Înapoi la pagina principală</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

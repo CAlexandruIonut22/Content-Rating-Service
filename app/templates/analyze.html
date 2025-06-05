@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Analiză AI - {{ content.title }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <h3>Analiză automată AI: {{ content.title }}</h3>
+            </div>
+            <div class="card-body">
+                <!-- Un mic avertisment despre modelul folosit -->
+                <div class="alert alert-info">
+                    <p><strong>Notă:</strong> Analiza este realizată cu modelul TinyLlama (1.1B parametri). Fiind un model mai mic, rezultatele sunt orientative și pot necesita o verificare suplimentară.</p>
+                </div>
+                
+                <!-- Info despre ce conținut analizăm -->
+                <div class="mb-4 border-bottom pb-3">
+                    <h5>Conținut analizat:</h5>
+                    {% if content.is_file %}
+                        <p>
+                            <strong>Fișier:</strong> 
+                            {% if content.file_path %}
+                                {{ content.file_path.split('/')[-1] }}
+                            {% else %}
+                                (lipsă informații)
+                            {% endif %}
+                        </p>
+                    {% else %}
+                        <p>
+                            <strong>Link:</strong> 
+                            <a href="{{ content.url }}" target="_blank">{{ content.url }}</a>
+                        </p>
+                    {% endif %}
+                    <p class="text-muted">Tip: {{ content.content_type }}</p>
+                </div>
+
+                {% if analysis %}
+                    <!-- Aici afișăm rezultatele analizei -->
+                    <div class="mb-4">
+                        <h5>Scor de factualitate:</h5>
+                        <div class="progress mb-3" style="height: 25px;">
+                            <div class="progress-bar {{ 'bg-danger' if analysis.factuality_score < 4 else ('bg-warning' if analysis.factuality_score < 7 else 'bg-success') }}" 
+                                 role="progressbar" 
+                                 style="width: {{ analysis.factuality_score * 10 }}%"
+                                 aria-valuenow="{{ analysis.factuality_score }}" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="10">
+                                {{ analysis.factuality_score }}/10
+                            </div>
+                        </div>
+                        <p class="small text-muted">Nivelul de încredere al modelului: {{ analysis.confidence }}/10</p>
+                    </div>
+
+                    <div class="mb-4">
+                        <h5>De ce a primit acest scor:</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p>{{ analysis.reasoning }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if analysis.questionable_claims and analysis.questionable_claims|length > 0 %}
+                        <div class="mb-4">
+                            <h5>Afirmații care ar trebui verificate:</h5>
+                            <ul class="list-group">
+                                {% for claim in analysis.questionable_claims %}
+                                    <li class="list-group-item list-group-item-warning">{{ claim }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-light">
+                            <p>Modelul nu a identificat afirmații problematice specifice în text.</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="alert alert-warning">
+                        <p>Ups! Nu am putut realiza analiza automată pentru acest conținut.</p>
+                        <p>Posibile cauze:</p>
+                        <ul>
+                            <li>Textul este într-un format nesuportat</li>
+                            <li>Conținutul este prea lung pentru model</li>
+                            <li>A apărut o eroare tehnică în timpul analizei</li>
+                        </ul>
+                        <p>Poți încerca să evaluezi manual acest conținut folosind butonul de mai jos.</p>
+                    </div>
+                {% endif %}
+
+                <div class="mb-3 border-top pt-3 mt-4">
+                    <h5>Ce înseamnă aceste scoruri?</h5>
+                    <ul>
+                        <li><strong>1-3:</strong> Conținut problematic - probabil conține informații false sau înșelătoare</li>
+                        <li><strong>4-6:</strong> Conținut mixt - unele informații par corecte, altele ar putea fi discutabile</li>
+                        <li><strong>7-10:</strong> Conținut de calitate - pare să conțină informații solide și bine documentate</li>
+                    </ul>
+                    <div class="alert alert-secondary mt-2">
+                        <small>Ține minte: Această analiză e realizată de un model AI de mici dimensiuni. Rezultatele sunt orientative și nu înlocuiesc judecata umană. Cel mai bine este să verifici din surse multiple!</small>
+                    </div>
+                </div>
+
+                <!-- Butonul de acțiune -->
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('view_content', content_id=content.id) }}" class="btn btn-primary">
+                        <i class="bi bi-arrow-left"></i> Înapoi la conținut
+                    </a>
+                    {% if session.get('user_id') %}
+                        <a href="{{ url_for('rate_content', content_id=content.id) }}" class="btn btn-success">
+                            <i class="bi bi-star-fill"></i> Vreau să evaluez eu acest conținut
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

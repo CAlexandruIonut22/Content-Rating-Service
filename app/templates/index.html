@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Pagina principală{% endblock %}
+
+{% block content %}
+<div class="jumbotron bg-light p-5 rounded">
+    <h1 class="display-4">Content Rating Service</h1>
+    <p class="lead">Evaluează și descoperă conținut digital de calitate.</p>
+    <hr class="my-4">
+    <p>Serviciu pentru evaluarea conținutului bazat pe coerență, adevăr și prezentare.</p>
+    <a class="btn btn-primary btn-lg" href="/upload" role="button">Începe să evaluezi</a>
+</div>
+
+<div class="row mt-5">
+    <div class="col-12">
+        <h2>Conținut recent</h2>
+    </div>
+</div>
+
+<div class="row">
+    {% if contents %}
+        {% for content in contents %}
+            <div class="col-md-4 mb-4">
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ content.title }}</h5>
+                        <p class="card-text">{{ content.content_type }}</p>
+                        <a href="/content/{{ content.id }}" class="btn btn-primary">Vezi detalii</a>
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="col-12">
+            <div class="alert alert-info">Nu există conținut încă. Fii primul care adaugă!</div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Încarcă conținut{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <h3>Încarcă conținut nou</h3>
+            </div>
+            <div class="card-body">
+                <!-- Informații despre tipurile suportate -->
+                <div class="alert alert-info mb-4">
+                    <h5>Ce poți încărca:</h5>
+                    <ul class="mb-0">
+                        <li><strong>Fișiere:</strong> txt, pdf, doc, mp4, mov, mp3, wav</li>
+                        <li><strong>Link-uri web:</strong> articole, bloguri, pagini de știri</li>
+                    </ul>
+                </div>
+
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">Titlu</label>
+                        <input type="text" class="form-control" id="title" name="title" 
+                               value="{{ request.args.get('title', '') }}" required 
+                               placeholder="Dă un titlu conținutului">
+                        <div class="form-text">
+                            Pentru URL-uri, titlul poate fi extras automat dacă nu îl completezi.
+                        </div>
+                    </div>
+
+                    <!-- Tab-uri pentru a alege între fișier și URL -->
+                    <div class="mb-3">
+                        <h5>Alege sursa conținutului:</h5>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="source_type" id="source_file" value="file" checked>
+                            <label class="btn btn-outline-primary" for="source_file">Încarcă fișier</label>
+                            
+                            <input type="radio" class="btn-check" name="source_type" id="source_url" value="url">
+                            <label class="btn btn-outline-primary" for="source_url">Link web</label>
+                        </div>
+                    </div>
+
+                    <!-- Secțiunea pentru fișiere -->
+                    <div id="file-section" class="mb-3">
+                        <label for="file" class="form-label">Selectează fișier</label>
+                        <input type="file" class="form-control" id="file" name="file">
+                        <div class="form-text text-muted">
+                            <strong>Acceptăm:</strong><br>
+                            📄 Text: txt, pdf, doc, docx<br>
+                            🎥 Video: mp4, mov, avi<br>
+                            🎵 Audio: mp3, wav, ogg
+                        </div>
+                    </div>
+
+                    <!-- Secțiunea pentru URL-uri -->
+                    <div id="url-section" class="mb-3" style="display: none;">
+                        <label for="url" class="form-label">Link către conținut</label>
+                        <input type="url" class="form-control" id="url" name="url" 
+                               value="{{ request.args.get('url', '') }}"
+                               placeholder="https://example.com/articol">
+                        <div class="form-text text-muted">
+                            <strong>Funcționează bine cu:</strong><br>
+                            📰 Articole de știri<br>
+                            📝 Postări de blog<br>
+                            📖 Pagini Wikipedia<br>
+                            📄 Documentații online
+                        </div>
+                        
+                        <!-- Buton pentru testarea URL-ului -->
+                        <div class="mt-2">
+                            <a href="/test-url-extraction" class="btn btn-sm btn-outline-info" target="_blank">
+                                🔍 Testează mai întâi URL-ul
+                            </a>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="content_type" class="form-label">Tipul conținutului</label>
+                        <select class="form-select" id="content_type" name="content_type">
+                            <option value="text">Text (articole, documente)</option>
+                            <option value="video">Video</option>
+                            <option value="audio">Audio</option>
+                        </select>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary btn-lg">Încarcă conținutul</button>
+                        <a href="/" class="btn btn-outline-secondary">Anulează</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Logică pentru a schimba între fișier și URL
+    document.querySelectorAll('input[name="source_type"]').forEach(radio => {
+        radio.addEventListener('change', function() {
+            const fileSection = document.getElementById('file-section');
+            const urlSection = document.getElementById('url-section');
+            const fileInput = document.getElementById('file');
+            const urlInput = document.getElementById('url');
+            
+            if (this.value === 'file') {
+                fileSection.style.display = 'block';
+                urlSection.style.display = 'none';
+                urlInput.value = '';
+                urlInput.removeAttribute('required');
+                fileInput.setAttribute('required', '');
+            } else {
+                fileSection.style.display = 'none';
+                urlSection.style.display = 'block';
+                fileInput.value = '';
+                fileInput.removeAttribute('required');
+                urlInput.setAttribute('required', '');
+            }
+        });
+    });
+    
+    // Inițializez corect dacă vine cu URL din query params
+    {% if request.args.get('url') %}
+        document.getElementById('source_url').checked = true;
+        document.getElementById('source_url').dispatchEvent(new Event('change'));
+    {% endif %}
+    
+    // Actualizare automată tip conținut bazat pe extensia fișierului
+    document.getElementById('file').addEventListener('change', function() {
+        const fileName = this.value.toLowerCase();
+        const contentTypeSelect = document.getElementById('content_type');
+        
+        if (fileName.includes('.mp4') || fileName.includes('.mov') || fileName.includes('.avi')) {
+            contentTypeSelect.value = 'video';
+        } else if (fileName.includes('.mp3') || fileName.includes('.wav') || fileName.includes('.ogg')) {
+            contentTypeSelect.value = 'audio';
+        } else {
+            contentTypeSelect.value = 'text';
+        }
+    });
+</script>
+{% endblock %}

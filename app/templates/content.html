@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}{{ content.title }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Coloana principală pentru conținut -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h2>{{ content.title }}</h2>
+                <div class="small text-muted">
+                    Adăugat pe {{ content.created_at.strftime('%d.%m.%Y') }} • 
+                    Tip: {{ content.content_type|capitalize }}
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- Afișează conținutul -->
+                {% if content.is_file %}
+                    <div class="border p-3 rounded mb-4">
+                        {% if content.content_type == 'video' %}
+                            <div class="ratio ratio-16x9">
+                                <video controls>
+                                    <source src="/{{ content.file_path }}" type="video/mp4">
+                                    Browserul tău nu suportă redarea video.
+                                </video>
+                            </div>
+                        {% elif content.content_type == 'audio' %}
+                            <div class="my-3">
+                                <audio controls class="w-100">
+                                    <source src="/{{ content.file_path }}" type="audio/mpeg">
+                                    Browserul tău nu suportă redarea audio.
+                                </audio>
+                            </div>
+                        {% else %}
+                            <div>
+                                <p>
+                                    <strong>Fișier:</strong> {{ content.file_path.split('/')[-1] if content.file_path else 'N/A' }}
+                                </p>
+                                {% if content.file_path %}
+                                <a href="/{{ content.file_path }}" class="btn btn-sm btn-primary" target="_blank">
+                                    Descarcă/Vizualizează fișierul
+                                </a>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                    </div>
+                {% else %}
+                    <div class="border p-3 rounded mb-4">
+                        <p><strong>Link:</strong></p>
+                        <p>
+                            <a href="{{ content.url }}" class="d-block" target="_blank">
+                                {{ content.url }}
+                            </a>
+                        </p>
+                        <a href="{{ content.url }}" class="btn btn-primary" target="_blank">
+                            Vizitează linkul
+                        </a>
+                    </div>
+                {% endif %}
+
+                <!-- În content.html, secțiunea pentru butoanele de acțiune -->
+{% if session.get('user_id') %}
+<div class="d-grid gap-2 mt-3">
+    <a href="{{ url_for('rate_content', content_id=content.id) }}" class="btn btn-primary">
+        Evaluează manual
+    </a>
+    <a href="{{ url_for('analyze_content', content_id=content.id) }}" class="btn btn-outline-secondary">
+        Analiză automată cu AI
+    </a>
+</div>
+{% else %}
+<div class="alert alert-warning mt-3">
+    <a href="/login">Autentifică-te</a> pentru a evalua sau analiza acest conținut
+</div>
+{% endif %}
+
+<!-- Adaugă secțiunea de analiză AI dacă există -->
+{% if ai_analysis %}
+<div class="mt-4 border-top pt-3">
+    <h5>Analiză automată de factualitate:</h5>
+    <div class="d-flex align-items-center">
+        <div class="progress flex-grow-1 me-2" style="height: 20px;">
+            <div class="progress-bar {{ 'bg-danger' if ai_analysis.factuality_score < 4 else ('bg-warning' if ai_analysis.factuality_score < 7 else 'bg-success') }}" 
+                style="width: {{ ai_analysis.factuality_score * 10 }}%">
+                {{ ai_analysis.factuality_score }}/10
+            </div>
+        </div>
+        <a href="{{ url_for('analyze_content', content_id=content.id) }}" class="btn btn-sm btn-outline-info">
+            Detalii
+        </a>
+    </div>
+</div>
+{% endif %}
+
+    <!-- Coloana laterală pentru evaluări -->
+    <div class="col-md-4">
+        <!-- Rezumat evaluări -->
+        <div class="card mb-4">
+            <div class="card-header bg-light">
+                <h4>Evaluări</h4>
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    <h1 class="display-4">{{ average_ratings.overall }}</h1>
+                    <p class="text-muted">din 10</p>
+                </div>
+
+                <!-- Evaluări individuale -->
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Coerență</span>
+                        <span class="badge bg-secondary">{{ average_ratings.coherence }}/10</span>
+                    </div>
+                    <div class="progress mt-1" style="height: 10px;">
+                        <div class="progress-bar coherence-bar" style="width: {{ average_ratings.coherence * 10 }}%"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Adevăr</span>
+                        <span class="badge bg-secondary">{{ average_ratings.truth }}/10</span>
+                    </div>
+                    <div class="progress mt-1" style="height: 10px;">
+                        <div class="progress-bar truth-bar" style="width: {{ average_ratings.truth * 10 }}%"></div>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span>Prezentare</span>
+                        <span class="badge bg-secondary">{{ average_ratings.attractiveness }}/10</span>
+                    </div>
+                    <div class="progress mt-1" style="height: 10px;">
+                        <div class="progress-bar attract-bar" style="width: {{ average_ratings.attractiveness * 10 }}%"></div>
+                    </div>
+                </div>
+
+                <div class="text-center text-muted mt-3">
+                    Bazat pe {{ ratings|length }} evaluări
+                </div>
+            </div>
+        </div>
+
+        <!-- Comentarii -->
+        <div class="card">
+            <div class="card-header bg-light">
+                <h4>Comentarii</h4>
+            </div>
+            <div class="card-body p-0">
+                {% if ratings and ratings|length > 0 %}
+                    <div class="list-group list-group-flush">
+                        {% for rating in ratings %}
+                            {% if rating.comment %}
+                                <div class="list-group-item">
+                                    <p class="mb-1">{{ rating.comment }}</p>
+                                    <div class="d-flex gap-2 small">
+                                        <span class="badge bg-success">C: {{ rating.coherence }}</span>
+                                        <span class="badge bg-primary">A: {{ rating.truth }}</span>
+                                        <span class="badge bg-warning text-dark">P: {{ rating.attractiveness }}</span>
+                                    </div>
+                                    <div class="small text-muted mt-1">
+                                        {{ rating.created_at.strftime('%d.%m.%Y') }}
+                                    </div>
+                                </div>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    
+                    {% set has_comments = false %}
+                    {% for rating in ratings %}
+                        {% if rating.comment %}
+                            {% set has_comments = true %}
+                        {% endif %}
+                    {% endfor %}
+                    
+                    {% if not has_comments %}
+                        <div class="p-4 text-center text-muted">
+                            <p>Niciun comentariu încă</p>
+                        </div>
+                    {% endif %}
+                {% else %}
+                    <div class="p-4 text-center text-muted">
+                        <p>Nicio evaluare încă - fii primul!</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
