@@ -5,10 +5,62 @@
 {% block content %}
 <div class="jumbotron bg-light p-5 rounded">
     <h1 class="display-4">Content Rating Service</h1>
-    <p class="lead">Evaluează și descoperă conținut digital de calitate.</p>
+    <p class="lead">Evaluează și descoperă conținut digital de calitate cu ajutorul AI.</p>
     <hr class="my-4">
-    <p>Serviciu pentru evaluarea conținutului bazat pe coerență, adevăr și prezentare.</p>
-    <a class="btn btn-primary btn-lg" href="/upload" role="button">Începe să evaluezi</a>
+    <p>Serviciu pentru evaluarea conținutului bazat pe coerență, adevăr și prezentare, powered by TinyLlama.</p>
+    
+    <!-- MODIFICAT: Butoane multiple pentru diferitele opțiuni -->
+    <div class="d-grid gap-2 d-md-flex justify-content-md-start">
+        <a class="btn btn-primary btn-lg me-2" href="/analyze-text" role="button">
+            📝 Analizează text acum
+        </a>
+        <a class="btn btn-outline-primary btn-lg me-2" href="/upload" role="button">
+            📁 Încarcă conținut
+        </a>
+        <a class="btn btn-outline-secondary btn-lg" href="/browse" role="button">
+            🔍 Explorează
+        </a>
+    </div>
+</div>
+
+<!-- ADĂUGAT: Secțiune care explică opțiunile disponibile -->
+<div class="row mt-5 mb-4">
+    <div class="col-12">
+        <h2>Cum funcționează?</h2>
+    </div>
+</div>
+
+<div class="row mb-5">
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h3>📝</h3>
+                <h5 class="card-title">Analiză text instant</h5>
+                <p class="card-text">Introdu direct textul în browser și primește o analiză de factualitate imediată cu TinyLlama.</p>
+                <a href="/analyze-text" class="btn btn-primary">Încearcă acum</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h3>🔗</h3>
+                <h5 class="card-title">URL și fișiere</h5>
+                <p class="card-text">Încarcă articole din web sau fișiere pentru analiză și evaluare de către comunitate.</p>
+                <a href="/upload" class="btn btn-outline-primary">Încarcă conținut</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-body text-center">
+                <h3>⭐</h3>
+                <h5 class="card-title">Evaluare manuală</h5>
+                <p class="card-text">Evaluează conținutul pe criterii de coerență, adevăr și prezentare.</p>
+                <a href="/browse" class="btn btn-outline-secondary">Vezi conținut</a>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="row mt-5">

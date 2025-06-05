@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Analizează Text Manual{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-10 mx-auto">
+        {% if not analysis %}
+            <!-- Formular pentru introducerea textului manual -->
+            <div class="card mb-4">
+                <div class="card-header bg-primary text-white">
+                    <h3>📝 Analizează Text Manual cu TinyLlama</h3>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-info">
+                        <p><strong>Cum funcționează:</strong></p>
+                        <ul class="mb-0">
+                            <li>Introduci textul direct în caseta de mai jos</li>
+                            <li>TinyLlama analizează textul pentru factualitate</li>
+                            <li>Primești un scor și explicații detaliate</li>
+                            <li>Nu se salvează nimic în baza de date - doar analiza</li>
+                        </ul>
+                    </div>
+
+                    <form method="POST">
+                        <div class="mb-3">
+                            <label for="title" class="form-label fw-bold">Titlu (opțional):</label>
+                            <input type="text" class="form-control" id="title" name="title" 
+                                   value="{{ request.args.get('title', '') }}" 
+                                   placeholder="Dă un titlu acestui text pentru context">
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="manual_text" class="form-label fw-bold">Textul pentru analiză:</label>
+                            <textarea class="form-control" id="manual_text" name="manual_text" 
+                                      rows="10" required 
+                                      placeholder="Introdu aici textul pe care vrei să îl analizezi pentru factualitate...">{{ request.args.get('text', '') }}</textarea>
+                            <div class="form-text">
+                                <span id="char-count">0</span> caractere | 
+                                <span id="word-count">0</span> cuvinte
+                            </div>
+                        </div>
+
+                        <div class="alert alert-warning">
+                            <p><strong>Limitări importante:</strong></p>
+                            <ul class="mb-0">
+                                <li>TinyLlama este un model mic (1.1B parametri) - rezultatele sunt orientative</li>
+                                <li>Pentru texte foarte lungi (>2000 caractere), modelul va analiza doar începutul</li>
+                                <li>Verificarea factualității se bazează pe cunoștințele din antrenare, nu pe surse externe</li>
+                            </ul>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg">
+                                🤖 Analizează cu TinyLlama
+                            </button>
+                            <a href="/" class="btn btn-outline-secondary">Anulează</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        {% else %}
+            <!-- Rezultatele analizei -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <h3>✅ Rezultatele Analizei</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Informații despre textul analizat -->
+                    <div class="mb-4 border-bottom pb-3">
+                        <h5>Text analizat:</h5>
+                        {% if title %}
+                            <p><strong>Titlu:</strong> {{ title }}</p>
+                        {% endif %}
+                        <p><strong>Sursa:</strong> {{ analysis.source_info }}</p>
+                        <p><strong>Statistici:</strong> {{ analysis.word_count }} cuvinte, {{ analysis.char_count }} caractere</p>
+                        
+                        {% if analysis.text_preview %}
+                            <div class="card bg-light mt-2">
+                                <div class="card-body">
+                                    <h6>Preview text:</h6>
+                                    <p class="small">{{ analysis.text_preview }}</p>
+                                </div>
+                            </div>
+                        {% endif %}
+                    </div>
+
+                    <!-- Scorul principal de factualitate -->
+                    <div class="mb-4">
+                        <h5>Scor de factualitate:</h5>
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="progress flex-grow-1 me-3" style="height: 30px;">
+                                <div class="progress-bar {{ 'bg-danger' if analysis.factuality_score < 4 else ('bg-warning' if analysis.factuality_score < 7 else 'bg-success') }}" 
+                                     role="progressbar" 
+                                     style="width: {{ analysis.factuality_score * 10 }}%"
+                                     aria-valuenow="{{ analysis.factuality_score }}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="10">
+                                    {{ analysis.factuality_score }}/10
+                                </div>
+                            </div>
+                            <span class="fs-4 fw-bold">{{ analysis.factuality_score }}/10</span>
+                        </div>
+                        <p class="text-muted">Nivelul de încredere al modelului: {{ analysis.confidence }}/10</p>
+                    </div>
+
+                    <!-- Explicația detaliată -->
+                    <div class="mb-4">
+                        <h5>De ce a primit acest scor:</h5>
+                        <div class="card bg-light">
+                            <div class="card-body">
+                                <p>{{ analysis.reasoning }}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Afirmații problematice -->
+                    {% if analysis.questionable_claims and analysis.questionable_claims|length > 0 %}
+                        <div class="mb-4">
+                            <h5>Afirmații care ar trebui verificate:</h5>
+                            <div class="list-group">
+                                {% for claim in analysis.questionable_claims %}
+                                    <div class="list-group-item list-group-item-warning">
+                                        ⚠️ {{ claim }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="alert alert-light">
+                            <p>ℹ️ Modelul nu a identificat afirmații problematice specifice în text.</p>
+                        </div>
+                    {% endif %}
+
+                    <!-- Ghid de interpretare -->
+                    <div class="mb-4 border-top pt-3">
+                        <h5>Cum să interpretezi rezultatele:</h5>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="card text-white bg-danger">
+                                    <div class="card-body text-center">
+                                        <h6>1-3 puncte</h6>
+                                        <p class="small mb-0">Conținut problematic - probabil conține informații false</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-dark bg-warning">
+                                    <div class="card-body text-center">
+                                        <h6>4-6 puncte</h6>
+                                        <p class="small mb-0">Conținut mixt - unele informații corecte, altele discutabile</p>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="card text-white bg-success">
+                                    <div class="card-body text-center">
+                                        <h6>7-10 puncte</h6>
+                                        <p class="small mb-0">Conținut credibil - pare să conțină informații solide</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-secondary mt-3">
+                            <small>
+                                💡 
+                                <strong>Recomandare:</strong> Această analiză este realizată de un model AI mic și oferă doar o evaluare preliminară. 
+                                Pentru informații importante, verifică întotdeauna din surse multiple și autoritare!
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Acțiuni disponibile -->
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('analyze_manual_text') }}" class="btn btn-primary">
+                            🔄 Analizează alt text
+                        </a>
+                        {% if session.get('user_id') %}
+                            <a href="{{ url_for('upload_content') }}" class="btn btn-outline-secondary">
+                                📁 Sau încarcă un fișier/URL pentru a-l salva
+                            </a>
+                        {% endif %}
+                        <a href="/" class="btn btn-outline-secondary">
+                            🏠 Înapoi la pagina principală
+                        </a>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Contorizarea caracterelor și cuvintelor în timp real
+    function updateCounters() {
+        const text = document.getElementById('manual_text').value;
+        const charCount = text.length;
+        const wordCount = text.trim() ? text.trim().split(/\s+/).length : 0;
+        
+        document.getElementById('char-count').textContent = charCount;
+        document.getElementById('word-count').textContent = wordCount;
+        
+        // Schimbă culoarea dacă textul devine prea lung
+        const charCountElement = document.getElementById('char-count');
+        if (charCount > 2000) {
+            charCountElement.style.color = 'orange';
+            charCountElement.title = 'Text lung - doar începutul va fi analizat';
+        } else {
+            charCountElement.style.color = '';
+            charCountElement.title = '';
+        }
+    }
+
+    // Actualizează contoarele la încărcarea paginii și la fiecare modificare
+    document.addEventListener('DOMContentLoaded', function() {
+        const textarea = document.getElementById('manual_text');
+        if (textarea) {
+            updateCounters(); // Inițial
+            textarea.addEventListener('input', updateCounters);
+            textarea.addEventListener('paste', function() {
+                // Actualizează contoarele după ce paste-ul s-a făcut
+                setTimeout(updateCounters, 10);
+            });
+        }
+    });
+</script>
+{% endblock %}

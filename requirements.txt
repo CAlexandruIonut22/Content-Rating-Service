@@ -15,3 +15,7 @@ sentencepiece==0.1.99
 # Opțional, pentru gestionarea mai bună a memoriei dacă folosești GPU
 # bitsandbytes==0.41.0  # Necesar doar pentru modele mari (Mistral)
 
+# Adaugă
+bitsandbytes==0.41.0  # Pentru quantization 4-bit
+tavily-python==0.3.0  # Pentru web search
+python-dotenv==1.0.0
