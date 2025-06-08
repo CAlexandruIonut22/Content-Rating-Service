@@ -1,5 +1,5 @@
 # Dependențe de bază pentru aplicația web
-flask==2.0.1
+flask==2.3.0
 flask-sqlalchemy==3.1.1   # <--- MODIFICAT AICI
 sqlalchemy==2.0.30        # <--- ADĂUGAT AICI (sau versiunea SQLAlchemy instalată compatibilă cu 3.x)
 validators==0.18.2
