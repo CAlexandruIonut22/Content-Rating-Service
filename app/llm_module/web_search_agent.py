@@ -1,34 +1,63 @@
-# app/llm_module/web_search_agent.py
+# app/llm_module/web_search_agent.py - Optimizat pentru TinyLlama
+import sys
+import os
 import requests
 import json
 import logging
+import re
 from typing import Dict, List, Optional
+
+# Fix pentru import-uri
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(os.path.dirname(current_dir))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+
 from .model_handler import ModelHandler
 
 logger = logging.getLogger(__name__)
 
 class WebSearchAgent:
-    """Agent care combină modelul LLM cu căutarea web pentru verificarea factualității"""
+    """
+    Agent web search optimizat pentru TinyLlama
+    Prompturi simple și verificări rapide
+    """
     
     def __init__(self, search_api_key: Optional[str] = None):
-        self.model_handler = ModelHandler()
         self.search_api_key = search_api_key
         self.search_enabled = search_api_key is not None
+        self.model_handler = None
         
-        if not self.model_handler.initialized:
-            self.model_handler.initialize(
-                model_id="meta-llama/Meta-Llama-3.1-8B-Instruct",  # Upgrade la Llama 3.1
-                use_4bit=True  # Folosim quantization pentru RAM
-            )
+        # Inițializează model handler doar dacă e necesar
+        self._init_model_handler()
+        
+        logger.info(f"WebSearchAgent inițializat (search {'activat' if self.search_enabled else 'dezactivat'})")
+    
+    def _init_model_handler(self):
+        """Inițializează model handler pentru analiză"""
+        try:
+            self.model_handler = ModelHandler()
+            if not self.model_handler.initialized:
+                # Folosește TinyLlama pentru analiză web
+                self.model_handler.initialize(
+                    model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
+                    use_4bit=False
+                )
+            logger.info("Model handler pentru web search inițializat")
+        except Exception as e:
+            logger.warning(f"Nu pot inițializa model handler pentru web search: {e}")
+            self.model_handler = None
     
     def search_web(self, query: str, max_results: int = 3) -> List[Dict]:
-        """Caută informații pe web folosind Tavily API"""
+        """Caută pe web folosind Tavily API"""
         if not self.search_enabled:
-            logger.warning("Web search nu este activat - lipsește API key")
+            logger.warning("Web search dezactivat - lipsește API key")
             return []
         
         try:
-            # Tavily Search API - gratis pentru 1000 căutări/lună
+            logger.info(f"🔍 Caut pe web: '{query}'")
+            
+            # Tavily Search API
             url = "https://api.tavily.com/search"
             
             payload = {
@@ -40,14 +69,14 @@ class WebSearchAgent:
                 "max_results": max_results,
                 "include_domains": [
                     "wikipedia.org", "britannica.com", "reuters.com", 
-                    "bbc.com", "cnn.com", "nature.com", "sciencedirect.com"
-                ],  # Surse de încredere
+                    "bbc.com", "cnn.com", "mediafax.ro", "digi24.ro"
+                ],
                 "exclude_domains": [
                     "reddit.com", "quora.com", "yahoo.answers.com"
-                ]  # Surse mai puțin fiabile
+                ]
             }
             
-            response = requests.post(url, json=payload, timeout=10)
+            response = requests.post(url, json=payload, timeout=15)
             response.raise_for_status()
             
             results = response.json()
@@ -61,251 +90,239 @@ class WebSearchAgent:
                     'score': result.get('score', 0)
                 })
             
-            logger.info(f"Găsite {len(search_results)} rezultate pentru: {query}")
+            logger.info(f"✅ Găsite {len(search_results)} rezultate pentru: {query}")
             return search_results
             
         except Exception as e:
-            logger.error(f"Eroare la căutarea web: {e}")
+            logger.error(f"❌ Eroare căutare web: {e}")
             return []
     
     def extract_claims_for_verification(self, text: str) -> List[str]:
-        """Extrage afirmații din text care ar trebui verificate"""
-        prompt = f"""
-Analizează următorul text și extrage 3-5 afirmații factuale specifice care pot fi verificate prin căutare web.
-Concentrează-te pe:
-- Date numerice, statistici
-- Evenimente istorice specifice
-- Afirmații științifice
-- Citate sau declarații atribuite unor persoane
-- Fapte care par neobișnuite sau controversate
+        """
+        Extrage afirmații din text pentru verificare
+        Versiune simplificată pentru TinyLlama
+        """
+        if not self.model_handler:
+            # Fallback simplu fără LLM
+            return self._extract_claims_simple(text)
+        
+        # Prompt foarte simplu pentru TinyLlama
+        prompt = f"""Citește textul și găsește 3 lucruri importante care pot fi verificate:
 
-Text: {text[:1500]}...
+Text: {text[:800]}
 
-Returnează doar o listă cu afirmațiile, separate prin newline, fără numerotare:
-"""
+Scrie doar 3 afirmații importante, fiecare pe o linie nouă.
+Nu pune numere sau puncte.
+Exemplu:
+România are 19 milioane locuitori
+Bucureștiul este capitala României
+UE a fost creată în 1993"""
         
         try:
             response = self.model_handler.generate_response(
-                prompt, 
-                max_new_tokens=300,
-                temperature=0.3
+                prompt,
+                max_new_tokens=150,
+                temperature=0.5,
+                do_sample=True
             )
             
             # Extrage afirmațiile din răspuns
             claims = []
-            for line in response.split('\n'):
-                line = line.strip()
-                if line and len(line) > 10 and not line.startswith(('1.', '2.', '3.', '-', '*')):
-                    # Curăță linia de prefixuri
-                    line = line.lstrip('1234567890.-* ')
-                    if len(line) > 10:
-                        claims.append(line)
+            lines = response.split('\n')
             
-            return claims[:5]  # Maxim 5 afirmații
+            for line in lines:
+                line = line.strip()
+                # Curăță linia de prefixuri comune
+                line = re.sub(r'^[-*•\d+\.)]\s*', '', line)
+                
+                if len(line) > 15 and len(line) < 200:  # Lungime rezonabilă
+                    claims.append(line)
+            
+            # Limitează la 3 afirmații maxim
+            return claims[:3]
             
         except Exception as e:
-            logger.error(f"Eroare la extragerea afirmațiilor: {e}")
-            return []
+            logger.error(f"Eroare extragere afirmații cu TinyLlama: {e}")
+            return self._extract_claims_simple(text)
+    
+    def _extract_claims_simple(self, text):
+        """Extragere simplă de afirmații fără LLM"""
+        # Împarte în propoziții
+        sentences = re.split(r'[.!?]', text)
+        
+        claims = []
+        for sentence in sentences:
+            sentence = sentence.strip()
+            
+            # Filtrează propozițiile care par să facă afirmații factuale
+            if (len(sentence) > 20 and 
+                len(sentence) < 150 and
+                any(word in sentence.lower() for word in 
+                    ['este', 'sunt', 'a fost', 'au fost', 'are', 'au', 'în', 'cu', 'de', 'la'])):
+                claims.append(sentence)
+        
+        return claims[:3]  # Maxim 3
     
     def verify_claim_with_search(self, claim: str) -> Dict:
-        """Verifică o afirmație prin căutare web"""
-        # Creează query-ul de căutare
-        search_query = claim[:100]  # Limitează lungimea
+        """Verifică o afirmație prin căutare web + TinyLlama"""
+        # Creează query simplu pentru căutare
+        search_query = self._simplify_claim_for_search(claim)
         
         # Caută pe web
-        search_results = self.search_web(search_query, max_results=3)
+        search_results = self.search_web(search_query, max_results=2)
         
         if not search_results:
             return {
                 'claim': claim,
                 'verification_status': 'no_sources',
                 'confidence': 0,
-                'explanation': 'Nu s-au găsit surse pentru verificare'
+                'explanation': 'Nu s-au găsit surse pentru verificare',
+                'sources_used': []
             }
         
-        # Pregătește contextul pentru LLM
-        context = ""
-        for i, result in enumerate(search_results):
-            context += f"Sursa {i+1} ({result['url']}):\n{result['content'][:300]}...\n\n"
+        # Pregătește context pentru TinyLlama
+        context = self._prepare_context_for_tinyllama(search_results)
         
-        # Prompt pentru verificarea afirmației
-        verification_prompt = f"""
-Analizează următoarea afirmație și verifică-o folosind sursele furnizate:
+        # Verifică cu TinyLlama
+        return self._verify_with_tinyllama(claim, context, search_results)
+    
+    def _simplify_claim_for_search(self, claim):
+        """Simplifică afirmația pentru căutare web"""
+        # Elimină cuvinte comune care nu ajută la căutare
+        stop_words = ['este', 'sunt', 'a fost', 'au fost', 'că', 'de', 'la', 'în', 'cu']
+        
+        words = claim.split()
+        filtered_words = [word for word in words if word.lower() not in stop_words]
+        
+        # Păstrează doar primele 6 cuvinte importante
+        search_query = ' '.join(filtered_words[:6])
+        
+        return search_query
+    
+    def _prepare_context_for_tinyllama(self, search_results):
+        """Pregătește contextul pentru TinyLlama (foarte scurt)"""
+        context = ""
+        
+        for i, result in enumerate(search_results[:2], 1):  # Maxim 2 surse
+            title = result.get('title', '')[:100]
+            content = result.get('content', '')[:200]  # Foarte scurt pentru TinyLlama
+            
+            context += f"Sursa {i}: {title}\n{content}\n\n"
+        
+        return context[:600]  # Limitează contextul total
+    
+    def _verify_with_tinyllama(self, claim, context, search_results):
+        """Verifică afirmația cu TinyLlama folosind contextul web"""
+        if not self.model_handler:
+            return self._manual_verification(claim, context, search_results)
+        
+        # Prompt foarte simplu pentru TinyLlama
+        prompt = f"""Afirmația: {claim}
 
-AFIRMAȚIE DE VERIFICAT: {claim}
-
-SURSE GĂSITE PE WEB:
+Ce spun sursele de pe internet:
 {context}
 
-Te rog să analizezi dacă afirmația este:
-1. ADEVĂRATĂ - confirmată de surse
-2. FALSĂ - contrazisă de surse  
-3. PARȚIAL ADEVĂRATĂ - parțial susținută
-4. NECONCLUDENTĂ - informații insuficiente
+Este afirmația adevărată sau falsă?
+Răspunde doar:
+ADEVĂRAT - dacă sursele confirmă
+FALS - dacă sursele contrazic  
+NECLAR - dacă nu e destulă informație
 
-Răspunde în format JSON:
-{{
-    "verification_status": "adevarata/falsa/partial_adevarata/neconcludenta",
-    "confidence": 8,
-    "explanation": "explicație scurtă bazată pe surse",
-    "sources_used": ["url1", "url2"]
-}}
-"""
+Apoi explică pe scurt de ce."""
         
         try:
             response = self.model_handler.generate_response(
-                verification_prompt,
-                max_new_tokens=200,
-                temperature=0.2
+                prompt,
+                max_new_tokens=100,
+                temperature=0.3,
+                do_sample=True
             )
             
-            # Încearcă să parseze JSON-ul
-            try:
-                # Extrage JSON din răspuns
-                json_start = response.find('{')
-                json_end = response.rfind('}') + 1
-                if json_start != -1 and json_end > json_start:
-                    json_str = response[json_start:json_end]
-                    result = json.loads(json_str)
-                    result['claim'] = claim
-                    return result
-            except json.JSONDecodeError:
-                pass
-            
-            # Fallback manual parsing
-            return {
-                'claim': claim,
-                'verification_status': 'neconcludenta',
-                'confidence': 5,
-                'explanation': f'Analiză completată cu resurse limitate: {response[:150]}...',
-                'sources_used': [r['url'] for r in search_results[:2]]
-            }
+            # Parsează răspunsul TinyLlama
+            verification_result = self._parse_verification_response(response, claim, search_results)
+            return verification_result
             
         except Exception as e:
-            logger.error(f"Eroare la verificarea afirmației: {e}")
-            return {
-                'claim': claim,
-                'verification_status': 'eroare',
-                'confidence': 0,
-                'explanation': f'Eroare la procesare: {str(e)}'
-            }
+            logger.error(f"Eroare verificare cu TinyLlama: {e}")
+            return self._manual_verification(claim, context, search_results)
     
-    def analyze_with_web_verification(self, text: str, title: str = None) -> Dict:
-        """Analiză completă cu verificare web"""
-        logger.info("Pornesc analiza cu verificare web...")
+    def _parse_verification_response(self, response, claim, search_results):
+        """Parsează răspunsul de verificare de la TinyLlama"""
+        response_lower = response.lower()
         
-        # 1. Analiză inițială cu modelul îmbunătățit
-        base_analysis = self._analyze_with_improved_model(text, title)
-        
-        # 2. Extrage afirmații pentru verificare
-        claims_to_verify = self.extract_claims_for_verification(text)
-        
-        verified_claims = []
-        false_claims = 0
-        true_claims = 0
-        
-        # 3. Verifică fiecare afirmație
-        for claim in claims_to_verify[:3]:  # Limitează la 3 pentru viteză
-            verification = self.verify_claim_with_search(claim)
-            verified_claims.append(verification)
+        # Detectează statusul
+        if 'adevărat' in response_lower or 'confirm' in response_lower:
+            status = 'adevarata'
+            confidence = 7
+        elif 'fals' in response_lower or 'contrazic' in response_lower:
+            status = 'falsa'
+            confidence = 7
+        elif 'neclar' in response_lower or 'insuficient' in response_lower:
+            status = 'neconcludenta'
+            confidence = 4
+        else:
+            # Fallback bazat pe cuvinte cheie
+            positive_words = ['da', 'corect', 'exact', 'confirmat']
+            negative_words = ['nu', 'greșit', 'incorect', 'fals']
             
-            if verification['verification_status'] == 'falsa':
-                false_claims += 1
-            elif verification['verification_status'] == 'adevarata':
-                true_claims += 1
-        
-        # 4. Ajustează scorul bazat pe verificări
-        adjustment = 0
-        if verified_claims:
-            false_ratio = false_claims / len(verified_claims)
-            true_ratio = true_claims / len(verified_claims)
+            pos_count = sum(1 for word in positive_words if word in response_lower)
+            neg_count = sum(1 for word in negative_words if word in response_lower)
             
-            if false_ratio > 0.5:
-                adjustment = -2  # Multe afirmații false
-            elif false_ratio > 0.3:
-                adjustment = -1  # Unele afirmații false
-            elif true_ratio > 0.7:
-                adjustment = +1  # Majoritatea adevărate
+            if neg_count > pos_count:
+                status = 'falsa'
+                confidence = 5
+            elif pos_count > neg_count:
+                status = 'adevarata'
+                confidence = 5
+            else:
+                status = 'neconcludenta'
+                confidence = 3
         
-        # 5. Scor final ajustat
-        final_score = max(1, min(10, base_analysis['factuality_score'] + adjustment))
-        
-        # 6. Construiește răspunsul final
-        enhanced_reasoning = base_analysis['reasoning']
-        if verified_claims:
-            enhanced_reasoning += f"\n\nVerificare web: Am verificat {len(verified_claims)} afirmații. "
-            enhanced_reasoning += f"Găsite {true_claims} adevărate, {false_claims} false."
+        # Extrage explicația
+        explanation = response[:150] + "..." if len(response) > 150 else response
         
         return {
-            'factuality_score': final_score,
-            'confidence': min(10, base_analysis['confidence'] + (2 if verified_claims else 0)),
-            'reasoning': enhanced_reasoning,
-            'questionable_claims': [v['claim'] for v in verified_claims if v['verification_status'] in ['falsa', 'partial_adevarata']],
-            'verified_claims': verified_claims,
-            'web_search_performed': len(verified_claims) > 0,
-            'sources_consulted': len(set([url for v in verified_claims for url in v.get('sources_used', [])]))
+            'claim': claim,
+            'verification_status': status,
+            'confidence': confidence,
+            'explanation': explanation,
+            'sources_used': [r['url'] for r in search_results[:2]]
         }
     
-    def _analyze_with_improved_model(self, text: str, title: str = None) -> Dict:
-        """Analiză cu modelul îmbunătățit (Llama 3.1)"""
-        # Prompt mai sofisticat pentru modelul mai puternic
-        analysis_prompt = f"""
-Ești un expert în verificarea factualității care analizează text pentru credibilitate.
-
-Analizează următorul text și oferă:
-1. Un scor de factualitate (1-10)
-2. Nivel de încredere (1-10) 
-3. Explicație detaliată
-
-{"Titlu: " + title if title else ""}
-Text: {text[:2000]}
-
-Criteriile de evaluare:
-- Prezența surselor credibile
-- Plausibilitatea afirmațiilor  
-- Consistența informațiilor
-- Limbajul folosit (obiectiv vs subiectiv)
-- Contextul și coerența
-
-Răspunde în JSON:
-{{
-    "factuality_score": 7,
-    "confidence": 8,
-    "reasoning": "explicație detaliată...",
-    "questionable_claims": ["afirmație dubioasă 1", "afirmație dubioasă 2"]
-}}
-"""
+    def _manual_verification(self, claim, context, search_results):
+        """Verificare manuală fără LLM"""
+        # Analiză simplă bazată pe cuvinte cheie
+        claim_lower = claim.lower()
+        context_lower = context.lower()
         
-        try:
-            response = self.model_handler.generate_response(
-                analysis_prompt,
-                max_new_tokens=400,
-                temperature=0.3
-            )
-            
-            # Parsare JSON similară cu cea din factuality_checker
-            # ... (implementare similară cu metodele existente)
-            
-            return self._parse_analysis_response(response)
-            
-        except Exception as e:
-            logger.error(f"Eroare la analiza cu modelul îmbunătățit: {e}")
-            return {
-                'factuality_score': 5,
-                'confidence': 3,
-                'reasoning': f'Eroare la procesare: {str(e)}',
-                'questionable_claims': []
-            }
-    
-    def _parse_analysis_response(self, response: str) -> Dict:
-        """Parsează răspunsul modelului (similară cu cea din factuality_checker)"""
-        # Implementare similară cu parse_factuality_response din factuality_checker
-        # ... (cod de parsare JSON)
+        # Extrage cuvinte cheie din afirmație
+        claim_words = set(re.findall(r'\b\w+\b', claim_lower))
+        context_words = set(re.findall(r'\b\w+\b', context_lower))
         
-        # Fallback simplu
+        # Calculează overlap
+        overlap = len(claim_words.intersection(context_words))
+        total_words = len(claim_words)
+        
+        if total_words == 0:
+            confidence = 0
+            status = 'neconcludenta'
+        else:
+            overlap_ratio = overlap / total_words
+            
+            if overlap_ratio > 0.6:
+                status = 'adevarata'
+                confidence = 6
+            elif overlap_ratio > 0.3:
+                status = 'partial_adevarata'
+                confidence = 4
+            else:
+                status = 'neconcludenta'
+                confidence = 3
+        
         return {
-            'factuality_score': 6,
-            'confidence': 6,
-            'reasoning': 'Analiză completată cu modelul îmbunătățit',
-            'questionable_claims': []
+            'claim': claim,
+            'verification_status': status,
+            'confidence': confidence,
+            'explanation': f'Verificare automată: overlap {overlap}/{total_words} cuvinte cu sursele găsite',
+            'sources_used': [r['url'] for r in search_results[:2]]
         }

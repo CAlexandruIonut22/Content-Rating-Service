@@ -12,7 +12,7 @@
             <div class="card-body">
                 <!-- Un mic avertisment despre modelul folosit -->
                 <div class="alert alert-info">
-                    <p><strong>Notă:</strong> Analiza este realizată cu modelul TinyLlama (1.1B parametri). Fiind un model mai mic, rezultatele sunt orientative și pot necesita o verificare suplimentară.</p>
+                    <p><strong>Notă:</strong> Analiza este realizată cu modelul TinyLlama (1.1B parametri) + Tavily Web Search. Rezultatele sunt orientative și pot necesita o verificare suplimentară.</p>
                 </div>
                 
                 <!-- Info despre ce conținut analizăm -->
@@ -51,13 +51,22 @@
                             </div>
                         </div>
                         <p class="small text-muted">Nivelul de încredere al modelului: {{ analysis.confidence }}/10</p>
+                        {% if analysis.analysis_type %}
+                            <p class="small text-muted">Tip analiză: {{ analysis.analysis_type }}</p>
+                        {% endif %}
+                        {% if analysis.web_search_performed %}
+                            <p class="small text-success">🔍 Analiză hibridă cu web search efectuată</p>
+                        {% endif %}
                     </div>
 
                     <div class="mb-4">
                         <h5>De ce a primit acest scor:</h5>
                         <div class="card bg-light">
                             <div class="card-body">
-                                <p>{{ analysis.reasoning }}</p>
+                                <!-- SECȚIUNEA FIXATĂ PENTRU AFIȘARE COMPLETĂ A REASONING-ULUI -->
+                                <div style="white-space: pre-wrap; word-wrap: break-word; line-height: 1.6; font-family: inherit;">
+                                    {{ analysis.reasoning }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -74,6 +83,37 @@
                     {% else %}
                         <div class="alert alert-light">
                             <p>Modelul nu a identificat afirmații problematice specifice în text.</p>
+                        </div>
+                    {% endif %}
+
+                    <!-- Afișează rezultatele web search dacă sunt disponibile -->
+                    {% if analysis.verified_claims and analysis.verified_claims|length > 0 %}
+                        <div class="mb-4">
+                            <h5>🔍 Verificări Web Search ({{ analysis.verified_claims|length }} afirmații):</h5>
+                            <div class="row">
+                                {% for claim in analysis.verified_claims %}
+                                    <div class="col-md-12 mb-2">
+                                        <div class="card border-{{ 'success' if claim.verification_status == 'adevarata' else ('danger' if claim.verification_status == 'falsa' else 'warning') }}">
+                                            <div class="card-body py-2">
+                                                <h6 class="card-title mb-1">
+                                                    {% if claim.verification_status == 'adevarata' %}
+                                                        ✅ Confirmat prin web search
+                                                    {% elif claim.verification_status == 'falsa' %}
+                                                        ❌ Infirmat prin web search
+                                                    {% else %}
+                                                        🤔 Neconcludent
+                                                    {% endif %}
+                                                </h6>
+                                                <p class="card-text small mb-1">{{ claim.claim }}</p>
+                                                <p class="card-text small text-muted">{{ claim.explanation }}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            {% if analysis.sources_consulted %}
+                                <p class="text-muted small">Surse consultate: {{ analysis.sources_consulted }}</p>
+                            {% endif %}
                         </div>
                     {% endif %}
                 {% else %}
@@ -97,7 +137,7 @@
                         <li><strong>7-10:</strong> Conținut de calitate - pare să conțină informații solide și bine documentate</li>
                     </ul>
                     <div class="alert alert-secondary mt-2">
-                        <small>Ține minte: Această analiză e realizată de un model AI de mici dimensiuni. Rezultatele sunt orientative și nu înlocuiesc judecata umană. Cel mai bine este să verifici din surse multiple!</small>
+                        <small>Ține minte: Această analiză e realizată de TinyLlama (1.1B parametri) cu web search. Rezultatele sunt orientative și nu înlocuiesc judecata umană. Cel mai bine este să verifici din surse multiple!</small>
                     </div>
                 </div>
 

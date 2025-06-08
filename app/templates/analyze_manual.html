@@ -45,14 +45,14 @@
                             <p><strong>Limitări importante:</strong></p>
                             <ul class="mb-0">
                                 <li>TinyLlama este un model mic (1.1B parametri) - rezultatele sunt orientative</li>
-                                <li>Pentru texte foarte lungi (>2000 caractere), modelul va analiza doar începutul</li>
-                                <li>Verificarea factualității se bazează pe cunoștințele din antrenare, nu pe surse externe</li>
+                                <li>Pentru texte foarte lungi (>1500 caractere), modelul va analiza doar începutul</li>
+                                <li>Verificarea factualității se bazează pe cunoștințele din antrenare + web search</li>
                             </ul>
                         </div>
 
                         <div class="d-grid gap-2">
                             <button type="submit" class="btn btn-primary btn-lg">
-                                🤖 Analizează cu TinyLlama
+                                🤖 Analizează cu TinyLlama + Web Search
                             </button>
                             <a href="/" class="btn btn-outline-secondary">Anulează</a>
                         </div>
@@ -63,7 +63,7 @@
             <!-- Rezultatele analizei -->
             <div class="card mb-4">
                 <div class="card-header bg-success text-white">
-                    <h3>✅ Rezultatele Analizei</h3>
+                    <h3>✅ Rezultatele Analizei TinyLlama</h3>
                 </div>
                 <div class="card-body">
                     <!-- Informații despre textul analizat -->
@@ -72,8 +72,8 @@
                         {% if title %}
                             <p><strong>Titlu:</strong> {{ title }}</p>
                         {% endif %}
-                        <p><strong>Sursa:</strong> {{ analysis.source_info }}</p>
-                        <p><strong>Statistici:</strong> {{ analysis.word_count }} cuvinte, {{ analysis.char_count }} caractere</p>
+                        <p><strong>Sursa:</strong> {{ analysis.source_info if analysis.source_info else 'Text introdus manual' }}</p>
+                        <p><strong>Statistici:</strong> {{ analysis.word_count if analysis.word_count else 'N/A' }} cuvinte, {{ analysis.char_count if analysis.char_count else 'N/A' }} caractere</p>
                         
                         {% if analysis.text_preview %}
                             <div class="card bg-light mt-2">
@@ -102,14 +102,23 @@
                             <span class="fs-4 fw-bold">{{ analysis.factuality_score }}/10</span>
                         </div>
                         <p class="text-muted">Nivelul de încredere al modelului: {{ analysis.confidence }}/10</p>
+                        {% if analysis.analysis_type %}
+                            <p class="text-muted">Tip analiză: {{ analysis.analysis_type }}</p>
+                        {% endif %}
+                        {% if analysis.web_search_performed %}
+                            <p class="text-success">🔍 Analiză hibridă: TinyLlama + Web Search efectuat</p>
+                        {% endif %}
                     </div>
 
-                    <!-- Explicația detaliată -->
+                    <!-- Explicația detaliată - AFIȘARE COMPLETĂ FIXATĂ -->
                     <div class="mb-4">
                         <h5>De ce a primit acest scor:</h5>
                         <div class="card bg-light">
                             <div class="card-body">
-                                <p>{{ analysis.reasoning }}</p>
+                                <!-- NOUA SECȚIUNE FIXATĂ PENTRU AFIȘARE COMPLETĂ -->
+                                <div style="white-space: pre-wrap; word-wrap: break-word; line-height: 1.6; font-family: inherit;">
+                                    {{ analysis.reasoning }}
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -129,6 +138,34 @@
                     {% else %}
                         <div class="alert alert-light">
                             <p>ℹ️ Modelul nu a identificat afirmații problematice specifice în text.</p>
+                        </div>
+                    {% endif %}
+
+                    <!-- Rezultate web search dacă sunt disponibile -->
+                    {% if analysis.verified_claims and analysis.verified_claims|length > 0 %}
+                        <div class="mb-4">
+                            <h5>🔍 Verificări Web ({{ analysis.verified_claims|length }} afirmații):</h5>
+                            <div class="row">
+                                {% for claim in analysis.verified_claims %}
+                                    <div class="col-md-12 mb-2">
+                                        <div class="card border-left-{{ 'success' if claim.verification_status == 'adevarata' else ('danger' if claim.verification_status == 'falsa' else 'warning') }}">
+                                            <div class="card-body py-2">
+                                                <h6 class="card-title mb-1">
+                                                    {% if claim.verification_status == 'adevarata' %}
+                                                        ✅ Confirmat
+                                                    {% elif claim.verification_status == 'falsa' %}
+                                                        ❌ Infirmat  
+                                                    {% else %}
+                                                        🤔 Neconcludent
+                                                    {% endif %}
+                                                </h6>
+                                                <p class="card-text small mb-1">{{ claim.claim[:100] }}...</p>
+                                                <p class="card-text small text-muted">{{ claim.explanation[:150] }}...</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
                         </div>
                     {% endif %}
 
@@ -165,7 +202,7 @@
                         <div class="alert alert-secondary mt-3">
                             <small>
                                 💡 
-                                <strong>Recomandare:</strong> Această analiză este realizată de un model AI mic și oferă doar o evaluare preliminară. 
+                                <strong>Recomandare:</strong> Această analiză este realizată de TinyLlama (1.1B parametri) cu web search. 
                                 Pentru informații importante, verifică întotdeauna din surse multiple și autoritare!
                             </small>
                         </div>
@@ -205,7 +242,7 @@
         
         // Schimbă culoarea dacă textul devine prea lung
         const charCountElement = document.getElementById('char-count');
-        if (charCount > 2000) {
+        if (charCount > 1500) {
             charCountElement.style.color = 'orange';
             charCountElement.title = 'Text lung - doar începutul va fi analizat';
         } else {

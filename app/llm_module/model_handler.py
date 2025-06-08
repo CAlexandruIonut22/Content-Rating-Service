@@ -1,15 +1,24 @@
 import os
+import sys
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-from huggingface_hub import snapshot_download, login, HfFolder
+import time
+import re  # ADĂUGAT pentru regex în clean_tinyllama_response
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from huggingface_hub import login
 import logging
+
+# Fix pentru import-uri
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_dir, '..', '..'))
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 logger = logging.getLogger(__name__)
 
 class ModelHandler:
     """
-    Gestionează modelul LLM upgraded - folosește pattern Singleton și suportă modele mai mari
-    UPGRADE: Suport pentru Llama 3.1 8B cu quantization 4-bit pentru eficiență RAM
+    Model Handler optimizat specific pentru TinyLlama-1.1B
+    Focus pe viteză și eficiență pentru hardware modest
     """
     _instance = None
     
@@ -20,147 +29,127 @@ class ModelHandler:
             cls._instance.tokenizer = None
             cls._instance.device = None
             cls._instance.initialized = False
-            cls._instance.max_context_length = 8192  # Llama 3.1 suportă mult mai mult context
             cls._instance.model_name = None
-            cls._instance.quantized = False
+            cls._instance.is_tinyllama = False
+            cls._instance.generation_stats = {"total_generations": 0, "total_time": 0}
         return cls._instance
     
     def initialize(self, 
-                  model_id="meta-llama/Meta-Llama-3.1-8B-Instruct",  # Upgrade la Llama 3.1
+                  model_id="TinyLlama/TinyLlama-1.1B-Chat-v1.0",
                   cache_dir="./model_cache", 
-                  use_4bit=True,  # Activează quantization by default
+                  use_4bit=False,
                   hf_token=None):
         """
-        Inițializează modelul upgraded - suportă modele mari cu quantization
-        
-        Args:
-            model_id: ID-ul modelului (default: Llama 3.1 8B)
-            cache_dir: Directorul de cache
-            use_4bit: Folosește quantization 4-bit pentru RAM efficiency
-            hf_token: Token Hugging Face (necesar pentru unele modele)
+        Inițializează TinyLlama cu setări optimizate
         """
         if self.initialized:
-            logger.info(f"Modelul {self.model_name} este deja inițializat")
+            logger.info(f"Model {self.model_name} deja inițializat")
             return
         
         try:
-            logger.info(f"🚀 Începere inițializare model UPGRADED: {model_id}")
+            logger.info(f"🚀 Inițializez TinyLlama: {model_id}")
             
-            # Detectează device-ul disponibil
+            # Detectează device-ul
             self.device = "cuda" if torch.cuda.is_available() else "cpu"
-            logger.info(f"🖥️  Device detectat: {self.device}")
+            logger.info(f"🖥️  Device: {self.device}")
             
-            # Afișează info despre GPU dacă e disponibil
             if self.device == "cuda":
-                gpu_name = torch.cuda.get_device_name(0)
-                total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
-                logger.info(f"🎮 GPU: {gpu_name}")
-                logger.info(f"💾 Memorie GPU totală: {total_memory:.1f} GB")
-                
-                # Verifică dacă avem destulă memorie pentru modelul mare
-                if total_memory < 6 and not use_4bit:
-                    logger.warning("⚠️  GPU cu <6GB RAM - activez quantization automată")
-                    use_4bit = True
+                try:
+                    gpu_name = torch.cuda.get_device_name(0)
+                    total_memory = torch.cuda.get_device_properties(0).total_memory / (1024**3)
+                    logger.info(f"🎮 GPU: {gpu_name} ({total_memory:.1f}GB)")
+                except:
+                    logger.info("🎮 GPU detectat dar nu pot obține detalii")
             else:
-                logger.info("⚠️  Rulând pe CPU - va fi mai lent dar funcționează")
+                logger.info("🖥️  Rulează pe CPU - perfect pentru TinyLlama!")
             
-            # Login la Hugging Face dacă e necesar
+            # Login HuggingFace dacă e necesar
             if hf_token:
-                login(token=hf_token)
-                logger.info("🔐 Autentificare Hugging Face completă")
+                try:
+                    login(token=hf_token)
+                    logger.info("🔐 HuggingFace login reușit")
+                except Exception as e:
+                    logger.warning(f"HuggingFace login eșuat: {e}")
             
-            # Verifică și creează directorul de cache
+            # Creează cache dir
             if not os.path.exists(cache_dir):
-                logger.info(f"📁 Creez directorul de cache: {cache_dir}")
                 os.makedirs(cache_dir, exist_ok=True)
+                logger.info(f"📁 Cache dir creat: {cache_dir}")
             
-            # Configurează quantization dacă e activată
-            quantization_config = None
-            if use_4bit:
-                logger.info("⚡ Configurez quantization 4-bit pentru economie de RAM")
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_compute_dtype=torch.float16,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_use_double_quant=True,
-                )
-                self.quantized = True
-            
-            # Încărcare tokenizer
-            logger.info("📝 Încărcare tokenizer...")
+            # Încărcare tokenizer TinyLlama
+            logger.info("📝 Încărcare tokenizer TinyLlama...")
             self.tokenizer = AutoTokenizer.from_pretrained(
-                model_id, 
+                model_id,
                 cache_dir=cache_dir,
                 trust_remote_code=True
             )
             
-            # Setup padding token dacă nu există
+            # Setup pentru TinyLlama tokenizer
             if self.tokenizer.pad_token is None:
                 self.tokenizer.pad_token = self.tokenizer.eos_token
-                logger.info("🔧 Setat padding token")
             
-            # Încărcare model cu configurația optimă
-            logger.info(f"🧠 Încărcare model {model_id}...")
-            if use_4bit:
-                logger.info("   ⚡ Folosind quantization 4-bit - va dura ~2-3 minute")
-            else:
-                logger.info("   ⚡ Încărcare model complet - va dura ~5-10 minute")
+            # Adaugă chat template dacă nu există
+            if not hasattr(self.tokenizer, 'chat_template') or self.tokenizer.chat_template is None:
+                # Template simplu pentru TinyLlama
+                self.tokenizer.chat_template = "{% for message in messages %}{{ message['content'] }}{% endfor %}"
             
-            torch_dtype = torch.float16 if self.device == "cuda" else torch.float32
+            logger.info("✅ Tokenizer TinyLlama încărcat")
             
-            self.model = AutoModelForCausalLM.from_pretrained(
-                model_id,
-                cache_dir=cache_dir,
-                quantization_config=quantization_config,
-                device_map="auto" if self.device == "cuda" else None,
-                torch_dtype=torch_dtype,
-                trust_remote_code=True,
-                low_cpu_mem_usage=True
-            )
+            # Încărcare model TinyLlama
+            logger.info("🧠 Încărcare model TinyLlama...")
+            start_time = time.time()
             
-            # Informații post-încărcare
-            self.model_name = model_id.split('/')[-1]
+            # Setări optimizate pentru TinyLlama
+            model_kwargs = {
+                "cache_dir": cache_dir,
+                "trust_remote_code": True,
+                "low_cpu_mem_usage": True,
+                "torch_dtype": torch.float32,  # TinyLlama merge bine cu float32
+            }
             
+            # Device mapping pentru TinyLlama
             if self.device == "cuda":
-                try:
-                    torch.cuda.empty_cache()  # Curățăm cache-ul GPU
-                    allocated = torch.cuda.memory_allocated(0) / (1024**3)
-                    cached = torch.cuda.memory_reserved(0) / (1024**3)
-                    logger.info(f"💾 Memorie GPU folosită: {allocated:.1f}GB (cached: {cached:.1f}GB)")
-                except:
-                    logger.info("💾 Nu pot afișa info despre memoria GPU")
+                model_kwargs["device_map"] = "auto"
+                model_kwargs["torch_dtype"] = torch.float16  # Float16 pe GPU
             
-            # Estimează parametrii efectivi
-            param_count = sum(p.numel() for p in self.model.parameters()) / 1e9
-            logger.info(f"🔢 Parametri model: ~{param_count:.1f}B")
+            self.model = AutoModelForCausalLM.from_pretrained(model_id, **model_kwargs)
             
-            if self.quantized:
-                logger.info("⚡ Quantization activă - modelul folosește ~50% mai puțin RAM")
+            load_time = time.time() - start_time
+            logger.info(f"⏱️  Model încărcat în {load_time:.1f} secunde")
             
-            # Test rapid pentru a verifica funcționarea
-            logger.info("🧪 Test rapid de funcționare...")
-            test_result = self._quick_functionality_test()
+            # Info despre model
+            self.model_name = model_id.split('/')[-1]
+            self.is_tinyllama = "tinyllama" in model_id.lower()
             
-            if test_result:
+            # Calculează parametrii
+            try:
+                total_params = sum(p.numel() for p in self.model.parameters())
+                logger.info(f"🔢 Parametri: {total_params/1e9:.2f}B")
+            except:
+                logger.info("🔢 Nu pot calcula parametrii")
+            
+            # Test rapid de funcționare
+            logger.info("🧪 Test funcționare...")
+            if self._test_generation():
                 self.initialized = True
-                logger.info("✅ Model inițializat cu SUCCES!")
-                logger.info(f"🎯 Context maxim: {self.max_context_length} tokens")
-                logger.info(f"🚀 Gata pentru analiză avansată de factualitate!")
+                logger.info("✅ TinyLlama inițializat cu SUCCES!")
+                logger.info("🚀 Gata pentru analiză rapidă!")
             else:
-                raise Exception("Testul de funcționare a eșuat")
+                raise Exception("Test de funcționare eșuat")
                 
         except Exception as e:
-            logger.error(f"❌ Eroare la inițializarea modelului: {str(e)}")
+            logger.error(f"❌ Eroare inițializare TinyLlama: {e}")
             self.initialized = False
             raise
     
-    def _quick_functionality_test(self):
-        """Test rapid pentru a verifica că modelul funcționează"""
+    def _test_generation(self):
+        """Test rapid pentru TinyLlama"""
         try:
-            test_prompt = "Test: 2+2="
+            test_prompt = "Salut! Cum"
+            
             inputs = self.tokenizer(test_prompt, return_tensors="pt")
             
-            if self.device == "cuda":
+            if self.device == "cuda" and next(self.model.parameters()).is_cuda:
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
             with torch.no_grad():
@@ -168,7 +157,8 @@ class ModelHandler:
                     **inputs,
                     max_new_tokens=5,
                     do_sample=False,
-                    pad_token_id=self.tokenizer.pad_token_id
+                    pad_token_id=self.tokenizer.pad_token_id,
+                    eos_token_id=self.tokenizer.eos_token_id
                 )
             
             response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
@@ -179,168 +169,200 @@ class ModelHandler:
             logger.error(f"🧪 Test eșuat: {e}")
             return False
     
-    def _truncate_input(self, prompt, max_input_length=6000):  # Mărită limita pentru Llama 3.1
-        """Trunchiază input-ul pentru a se încadra în contextul modelului"""
-        tokens = self.tokenizer.encode(prompt, add_special_tokens=False)
-        
-        if len(tokens) <= max_input_length:
-            return prompt
-        
-        logger.warning(f"⚠️  Prompt prea lung ({len(tokens)} tokens), trunchiez la {max_input_length}")
-        
-        # Pentru modele mai puternice, păstrăm mai mult context
-        start_tokens = tokens[:max_input_length//2]
-        end_tokens = tokens[-(max_input_length//2):]
-        
-        start_text = self.tokenizer.decode(start_tokens, skip_special_tokens=True)
-        end_text = self.tokenizer.decode(end_tokens, skip_special_tokens=True)
-        
-        truncated_prompt = start_text + "\n[...text trunchiat pentru analiza optimă...]\n" + end_text
-        return truncated_prompt
-    
-    def generate_response(self, prompt, max_new_tokens=512, temperature=0.7, do_sample=True):
+    def generate_response(self, prompt, max_new_tokens=250, temperature=0.7, do_sample=True):
         """
-        Generează răspuns optimizat pentru Llama 3.1
-        
-        Args:
-            prompt: Promptul de input
-            max_new_tokens: Numărul maxim de tokeni noi
-            temperature: Temperatura pentru sampling
-            do_sample: Dacă să folosească sampling
+        Generează răspuns optimizat pentru TinyLlama
         """
         if not self.initialized:
-            raise RuntimeError("⚠️  Modelul nu este inițializat! Apelează initialize() mai întâi.")
+            raise RuntimeError("TinyLlama nu este inițializat!")
         
         try:
-            # Optimizează promptul pentru Llama 3.1 (folosește format chat)
-            if "meta-llama/Meta-Llama-3" in self.model_name:
-                formatted_prompt = self._format_llama_prompt(prompt)
-            else:
-                formatted_prompt = prompt
+            # Import config pentru setări
+            try:
+                from app.config import Config
+                
+                max_new_tokens = getattr(Config, 'LLM_MAX_NEW_TOKENS', max_new_tokens)
+                temperature = getattr(Config, 'LLM_DEFAULT_TEMPERATURE', temperature)
+                do_sample = getattr(Config, 'LLM_DO_SAMPLE', do_sample)
+            except ImportError:
+                pass
             
-            # Trunchiază dacă e necesar
-            truncated_prompt = self._truncate_input(formatted_prompt, max_input_length=6000)
+            # Adaptează promptul pentru TinyLlama
+            formatted_prompt = self._format_tinyllama_prompt(prompt)
             
-            logger.info(f"🔄 Generez răspuns cu {self.model_name} (primele 50 char): '{truncated_prompt[:50]}...'")
+            # Limitează lungimea pentru TinyLlama
+            truncated_prompt = self._truncate_for_tinyllama(formatted_prompt)
             
-            # Tokenizare cu handling îmbunătățit
+            logger.info(f"🔄 TinyLlama generează răspuns...")
+            logger.info(f"📏 Tokens noi: {max_new_tokens}, Temp: {temperature}")
+            
+            # Tokenizare optimizată pentru TinyLlama
             inputs = self.tokenizer(
-                truncated_prompt, 
-                return_tensors="pt", 
-                padding=True, 
-                truncation=True, 
-                max_length=self.max_context_length - max_new_tokens
+                truncated_prompt,
+                return_tensors="pt",
+                padding=False,
+                truncation=True,
+                max_length=1800  # Lasă spațiu pentru output
             )
             
-            # Mută pe device-ul corect
-            if self.device == "cuda":
+            if self.device == "cuda" and next(self.model.parameters()).is_cuda:
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
             
             input_length = inputs['input_ids'].shape[1]
-            logger.info(f"📏 Lungime input: {input_length} tokens")
+            logger.info(f"📏 Input tokens: {input_length}")
             
-            # Generare cu parametri optimizați pentru factualitate
-            generation_config = {
-                "max_new_tokens": max_new_tokens,
-                "temperature": temperature,
-                "do_sample": do_sample,
-                "top_p": 0.9,  # Nucleus sampling pentru răspunsuri mai focalizate
-                "repetition_penalty": 1.1,  # Evită repetițiile
-                "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": self.tokenizer.eos_token_id,
-            }
+            # Parametri optimizați pentru TinyLlama
+            generation_config = self._get_tinyllama_generation_config(
+                max_new_tokens, temperature, do_sample
+            )
             
-            # Pentru analiză factualitate, folosim parametri mai conservatori
-            if temperature < 0.5:  # Probabil factuality analysis
-                generation_config.update({
-                    "temperature": 0.3,
-                    "top_p": 0.8,
-                    "repetition_penalty": 1.05
-                })
+            # Generare cu timing
+            start_time = time.time()
             
             with torch.no_grad():
                 outputs = self.model.generate(**inputs, **generation_config)
             
-            # Decodează doar partea nouă
+            generation_time = time.time() - start_time
+            
+            # Decodare și cleanup
             full_response = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
+            response = self._extract_tinyllama_response(full_response, truncated_prompt)
             
-            # Extrage doar răspunsul nou (elimină promptul)
-            if "meta-llama/Meta-Llama-3" in self.model_name:
-                response = self._extract_llama_response(full_response, formatted_prompt)
-            else:
-                response = full_response.replace(truncated_prompt, "").strip()
+            # Curăță răspunsul
+            response = self._clean_tinyllama_response(response)
             
-            if not response:
-                response = full_response  # Fallback
+            # Statistici
+            self.generation_stats["total_generations"] += 1
+            self.generation_stats["total_time"] += generation_time
             
-            logger.info(f"✅ Răspuns generat: {len(response)} caractere")
-            logger.info(f"🔍 Preview răspuns: {response[:100]}...")
+            logger.info(f"✅ Generat în {generation_time:.1f}s ({len(response)} chars)")
             
-            # Curăță memoria GPU dacă e necesar
+            if getattr(Config, 'WARN_IF_GENERATION_SLOW', 60) < generation_time:
+                logger.warning(f"⚠️  Generare lentă: {generation_time:.1f}s")
+            
+            # Cleanup GPU memory
             if self.device == "cuda":
                 torch.cuda.empty_cache()
             
             return response
             
         except Exception as e:
-            logger.error(f"❌ Eroare la generarea răspunsului: {str(e)}")
+            logger.error(f"❌ Eroare generare TinyLlama: {e}")
             if self.device == "cuda":
                 torch.cuda.empty_cache()
-            return f"Eroare la procesarea textului cu {self.model_name}: {str(e)[:100]}... Te rog încearcă cu un text mai scurt."
+            return f"Eroare la generare: {str(e)[:100]}..."
     
-    def _format_llama_prompt(self, prompt):
-        """Formatează promptul pentru Llama 3.1 folosind chat template"""
-        messages = [
-            {
-                "role": "system", 
-                "content": "Ești un asistent AI expert în verificarea factualității și analiza critică a textelor. Răspunde întotdeauna în JSON când este solicitat."
-            },
-            {
-                "role": "user", 
-                "content": prompt
-            }
-        ]
+    def _format_tinyllama_prompt(self, prompt):
+        """Formatează prompt pentru TinyLlama"""
+        if self.is_tinyllama:
+            # TinyLlama funcționează bine cu format simplu
+            return f"<|user|>\n{prompt}\n<|assistant|>\n"
+        return prompt
+    
+    def _truncate_for_tinyllama(self, prompt, max_length=1500):
+        """Trunchiază prompt pentru TinyLlama (context limitat)"""
+        if len(prompt) <= max_length:
+            return prompt
         
-        # Folosește chat template dacă e disponibil
-        if hasattr(self.tokenizer, 'apply_chat_template'):
-            return self.tokenizer.apply_chat_template(
-                messages, 
-                tokenize=False, 
-                add_generation_prompt=True
-            )
+        logger.warning(f"Prompt prea lung pentru TinyLlama ({len(prompt)} chars), trunchiez")
+        
+        # Păstrează începutul și sfârșitul
+        start_part = prompt[:max_length//2]
+        end_part = prompt[-(max_length//2):]
+        
+        return start_part + "\n[...]\n" + end_part
+    
+    def _get_tinyllama_generation_config(self, max_new_tokens, temperature, do_sample):
+        """Configurație optimizată pentru TinyLlama (fără warning-uri)"""
+        config = {
+            "max_new_tokens": max_new_tokens,
+            "pad_token_id": self.tokenizer.pad_token_id,
+            "eos_token_id": self.tokenizer.eos_token_id,
+            "use_cache": True,
+        }
+        
+        if do_sample:
+            # Sampling mode pentru TinyLlama
+            config.update({
+                "do_sample": True,
+                "temperature": temperature,
+                "top_p": 0.9,
+                "top_k": 50,
+                "repetition_penalty": 1.1,
+                # Nu folosim early_stopping cu greedy/sampling
+            })
         else:
-            # Fallback manual pentru Llama format
-            formatted = "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
-            formatted += messages[0]["content"]
-            formatted += "<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
-            formatted += messages[1]["content"]
-            formatted += "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-            return formatted
-    
-    def _extract_llama_response(self, full_response, original_prompt):
-        """Extrage răspunsul din output-ul Llama 3.1"""
-        # Încearcă să găsească răspunsul după promptul formatat
-        if "<|start_header_id|>assistant<|end_header_id|>" in full_response:
-            parts = full_response.split("<|start_header_id|>assistant<|end_header_id|>")
-            if len(parts) > 1:
-                response = parts[-1].strip()
-                # Elimină token-ii de sfârșitul răspunsului
-                response = response.replace("<|eot_id|>", "").strip()
-                return response
+            # Greedy mode - fără early_stopping cu num_beams=1
+            config.update({
+                "do_sample": False,
+                "repetition_penalty": 1.05,
+                # Eliminat early_stopping pentru a evita warning-ul
+            })
         
-        # Fallback: elimină promptul original
-        return full_response.replace(original_prompt, "").strip()
+        return config
+    
+    def _extract_tinyllama_response(self, full_response, prompt):
+        """Extrage răspunsul din output-ul TinyLlama"""
+        # Elimină promptul original
+        response = full_response.replace(prompt, "").strip()
+        
+        # Curăță marcajele TinyLlama
+        if "<|assistant|>" in response:
+            response = response.split("<|assistant|>")[-1].strip()
+        
+        if "<|user|>" in response:
+            response = response.split("<|user|>")[0].strip()
+        
+        return response
+    
+    def _clean_tinyllama_response(self, response):
+        """Curăță răspunsul TinyLlama de artefacte"""
+        if not response:
+            return "Nu am putut genera un răspuns valid."
+        
+        # Elimină repetițiile comune la TinyLlama
+        lines = response.split('\n')
+        cleaned_lines = []
+        prev_line = ""
+        
+        for line in lines:
+            line = line.strip()
+            if line and line != prev_line:  # Elimină liniile duplicate consecutive
+                cleaned_lines.append(line)
+                prev_line = line
+        
+        response = '\n'.join(cleaned_lines)
+        
+        # Pentru JSON, păstrează doar JSON-ul valid
+        json_match = re.search(r'(\{[^{}]*"factuality_score"[^{}]*\})', response, re.IGNORECASE | re.DOTALL)
+        if json_match:
+            # Dacă găsim JSON, returnează doar JSON-ul + completează dacă e incomplet
+            json_part = json_match.group(1)
+            if not json_part.endswith('}'):
+                json_part += '}'
+            return json_part
+        
+        # Limitează lungimea dacă nu e JSON
+        if len(response) > 500:
+            response = response[:500] + "..."
+        
+        return response.strip()
     
     def get_model_info(self):
-        """Returnează informații despre modelul încărcat"""
+        """Info despre TinyLlama"""
         if not self.initialized:
             return {"status": "not_initialized"}
+        
+        avg_time = 0
+        if self.generation_stats["total_generations"] > 0:
+            avg_time = self.generation_stats["total_time"] / self.generation_stats["total_generations"]
         
         return {
             "status": "initialized",
             "model_name": self.model_name,
             "device": self.device,
-            "quantized": self.quantized,
-            "max_context": self.max_context_length,
-            "parameters": f"~{sum(p.numel() for p in self.model.parameters()) / 1e9:.1f}B"
+            "is_tinyllama": self.is_tinyllama,
+            "total_generations": self.generation_stats["total_generations"],
+            "average_time": f"{avg_time:.1f}s",
+            "memory_efficient": True
         }
