@@ -28,4 +28,4 @@ if __name__ == '__main__':
     """)
     # Logez si in consola ca sa vad ce se intampla
     logging.basicConfig(level=logging.INFO)
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    #app.run(debug=True, host='127.0.0.1', port=5000)
