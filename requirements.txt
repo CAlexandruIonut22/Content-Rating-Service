@@ -4,6 +4,7 @@ flask-sqlalchemy==2.5.1
 validators==0.18.2
 werkzeug==2.0.1
 PyPDF2==2.10.0
+gunicorn==23.0.0
 
 # Dependențe pentru modelul LLM (TinyLlama)
 torch==2.0.1        # Poți folosi și varianta CPU: torch==2.0.1+cpu --index-url https://download.pytorch.org/whl/cpu
@@ -12,8 +13,6 @@ huggingface_hub==0.16.4
 accelerate==0.21.0
 sentencepiece==0.1.99
 
-# Opțional, pentru gestionarea mai bună a memoriei dacă folosești GPU
-# bitsandbytes==0.41.0  # Necesar doar pentru modele mari (Mistral)
 
 # Adaugă
 bitsandbytes==0.41.0  # Pentru quantization 4-bit
