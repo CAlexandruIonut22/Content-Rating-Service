@@ -6,6 +6,8 @@ validators==0.18.2
 werkzeug==2.3.0
 PyPDF2==2.10.0
 gunicorn==23.0.0
+psycopg2-binary==2.9.9
+
 
 # Dependențe pentru modelul LLM (TinyLlama)
 torch==2.0.1
@@ -18,3 +20,4 @@ sentencepiece==0.1.99
 bitsandbytes==0.41.0
 tavily-python==0.3.0
 python-dotenv==1.0.0
+psycopg2-binary
