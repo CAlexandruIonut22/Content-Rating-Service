@@ -1,20 +1,20 @@
 # Dependențe de bază pentru aplicația web
 flask==2.0.1
-flask-sqlalchemy==2.5.1
+flask-sqlalchemy==3.1.1   # <--- MODIFICAT AICI
+sqlalchemy==2.0.30        # <--- ADĂUGAT AICI (sau versiunea SQLAlchemy instalată compatibilă cu 3.x)
 validators==0.18.2
 werkzeug==2.0.1
 PyPDF2==2.10.0
 gunicorn==23.0.0
 
 # Dependențe pentru modelul LLM (TinyLlama)
-torch==2.0.1        # Poți folosi și varianta CPU: torch==2.0.1+cpu --index-url https://download.pytorch.org/whl/cpu
+torch==2.0.1
 transformers==4.30.2
 huggingface_hub==0.16.4
 accelerate==0.21.0
 sentencepiece==0.1.99
 
-
 # Adaugă
-bitsandbytes==0.41.0  # Pentru quantization 4-bit
-tavily-python==0.3.0  # Pentru web search
+bitsandbytes==0.41.0
+tavily-python==0.3.0
 python-dotenv==1.0.0
