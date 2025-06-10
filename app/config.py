@@ -7,7 +7,7 @@ load_dotenv()
 class Config:
     # Setări generale
     SECRET_KEY = os.environ.get('SECRET_KEY', '1234')
-    SQLALCHEMY_DATABASE_URI = "postgresql://test_v64e_user:NY9EkSOPMPv3vAfIfXvPaNMazOVm1s4n@dpg-d12pjjruibrs73ffr9ng-a.frankfurt-postgres.render.com/test_v64e"
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'sqlite:///ratings.db')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     # Unde salvez fișierele încărcate
